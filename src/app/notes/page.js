@@ -5,5 +5,5 @@ const NotesPage = () => {
 export default NotesPage;
 
 export const generateMetadata = () => {
-  return { title: "FlowBrain - Notes" };
+  return { title: "IntelliNotes - Notes" };
 };

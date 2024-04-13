@@ -11,5 +11,5 @@ const SignInPage = () => {
 export default SignInPage;
 
 export const generateMetadata = () => {
-  return { title: "FlowBrain - Sign In" };
+  return { title: "IntelliNotes - Sign In" };
 };

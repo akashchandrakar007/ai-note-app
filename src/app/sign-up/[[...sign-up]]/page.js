@@ -11,5 +11,5 @@ const SignUpPage = () => {
 export default SignUpPage;
 
 export const generateMetadata = () => {
-  return { title: "FlowBrain - Sign Up" };
+  return { title: "IntelliNotes - Sign Up" };
 };
