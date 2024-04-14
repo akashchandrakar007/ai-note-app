@@ -1,3 +1,5 @@
+"use client";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { createNoteSchema } from "@/lib/validation/note";
@@ -21,31 +23,48 @@ import { Textarea } from "./ui/textarea";
 import LoadingButton from "./LoadingButton";
 import { useRouter } from "next/navigation";
 
-const AddNoteDialog = ({ open, setOpen }) => {
+const AddEditNoteDialog = ({ open, setOpen, noteToEdit }) => {
+  const [deleteInProgress, setDeleteInProgress] = useState(false);
   const router = useRouter();
   const form = useForm({
     resolver: zodResolver(createNoteSchema),
     defaultValues: {
-      title: "",
-      content: "",
+      title: noteToEdit?.title || "",
+      content: noteToEdit?.content || "",
     },
   });
 
   const onSubmit = async (input) => {
     try {
-      const response = await fetch("api/notes", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(input),
-      });
+      if (noteToEdit) {
+        const response = await fetch("api/notes", {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            id: noteToEdit.id,
+            ...input,
+          }),
+        });
+        setOpen();
+      } else {
+        const response = await fetch("api/notes", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(input),
+        });
 
-      if (!response.ok) {
-        throw Error("Status code: " + response.status);
+        if (!response.ok) {
+          throw Error("Status code: " + response.status);
+        }
+
+        form.reset();
+        setOpen();
       }
 
-      form.reset();
       router.refresh();
     } catch (error) {
       console.error(error);
@@ -53,11 +72,37 @@ const AddNoteDialog = ({ open, setOpen }) => {
     }
   };
 
+  const deleteNote = async () => {
+    if (!noteToEdit) return;
+    setDeleteInProgress(true);
+    try {
+      const response = await fetch("api/notes", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: noteToEdit.id,
+        }),
+      });
+      if (!response.ok) {
+        throw Error("Status code: " + response.status);
+      }
+      setOpen();
+      router.refresh();
+    } catch (error) {
+      console.error(error);
+      alert("Something went wrong, Please try again");
+    } finally {
+      setDeleteInProgress(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add Note</DialogTitle>
+          <DialogTitle>{noteToEdit ? "Edit Note" : "Add Note"}</DialogTitle>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
@@ -88,10 +133,23 @@ const AddNoteDialog = ({ open, setOpen }) => {
               )}
             />
             <DialogFooter>
+              {noteToEdit && (
+                <LoadingButton
+                  className="mt-4"
+                  type="button"
+                  loading={deleteInProgress}
+                  disabled={form.formState.isSubmitting}
+                  onClick={deleteNote}
+                  variant="destructive"
+                >
+                  Delete Note
+                </LoadingButton>
+              )}
               <LoadingButton
                 type="submit"
                 loading={form.formState.isSubmitting}
                 className="mt-4"
+                disabled={deleteInProgress}
               >
                 Submit
               </LoadingButton>
@@ -103,4 +161,4 @@ const AddNoteDialog = ({ open, setOpen }) => {
   );
 };
 
-export default AddNoteDialog;
+export default AddEditNoteDialog;
