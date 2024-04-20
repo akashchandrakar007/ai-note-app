@@ -5,6 +5,8 @@ import {
 } from "@/lib/validation/note";
 import { auth } from "@clerk/nextjs";
 import prisma from "@/lib/db/prisma.js";
+import { getEmbeddings } from "@/lib/openai";
+import { noteIndex } from "@/lib/db/pinecone";
 
 export const POST = async (req) => {
   try {
@@ -23,8 +25,20 @@ export const POST = async (req) => {
 
     const { title, content } = parseResult.data;
 
-    const note = await prisma.note.create({
-      data: { title, content, userId },
+    const embeddings = await getEmbeddingForNote(title, content);
+
+    const note = await prisma.$transaction(async (tx) => {
+      const note = await tx.note.create({
+        data: { title, content, userId },
+      });
+
+      await noteIndex.upsert([
+        {
+          id: note.id,
+          values: embeddings,
+          metadata: { userId },
+        },
+      ]);
     });
 
     return Response.json({ note: note }, { status: 201 });
@@ -56,15 +70,29 @@ export const PUT = async (req) => {
       return Response.json({ error: "Unauthorized " }, { status: 401 });
     }
 
-    const updateNote = await prisma.note.update({
-      where: { id },
-      data: {
-        title,
-        content,
-      },
+    const embeddings = await getEmbeddingForNote(title, content);
+
+    const updatedNote = await prisma.$transaction(async (tx) => {
+      const updateNote = await tx.note.update({
+        where: { id },
+        data: {
+          title,
+          content,
+        },
+      });
+
+      await noteIndex.upsert([
+        {
+          id,
+          values: embeddings,
+          metadata: { userId },
+        },
+      ]);
+
+      return updateNote;
     });
 
-    return Response.json({ note: updateNote }, { status: 200 });
+    return Response.json({ note: updatedNote }, { status: 200 });
   } catch (error) {
     console.error({ error });
     return Response.json({ error: "Internal Server Error" }, { status: 500 });
@@ -93,8 +121,11 @@ export const DELETE = async (req) => {
       return Response.json({ error: "Unauthorized " }, { status: 401 });
     }
 
-    await prisma.note.delete({
-      where: { id },
+    await prisma.$transaction(async (tx) => {
+      await tx.note.delete({
+        where: { id },
+      });
+      await noteIndex.deleteOne(id);
     });
 
     return Response.json({ message: "Note deleted" }, { status: 200 });
@@ -102,4 +133,8 @@ export const DELETE = async (req) => {
     console.error({ error });
     return Response.json({ error: "Internal Server Error" }, { status: 500 });
   }
+};
+
+export const getEmbeddingForNote = async (text, content) => {
+  return getEmbeddings(text + "\n\n" + content ?? "");
 };
